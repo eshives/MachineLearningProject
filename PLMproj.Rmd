@@ -1,0 +1,88 @@
+---
+title: "Exercise Type from Movement Data by Emily Shives"
+output: 
+  html_document:
+    keep_md: true
+---
+
+## Overview
+The goal of this project is to use movement data to determine the manner in which a dumbbell exercise was performed. After preprocessing the data to remove NA values and creating subsets of the data to perform cross validation, I fit several different models and compared their accuracy. The final model chosen was the one created using random forests. This final model had an approximate predicted out of sample error of less than 0.01 and was applied to the test data set provided in the project.
+
+
+## Data Processing and Exploratory Data Analysis
+First, the files must be downloaded. 
+```{r}
+library(caret)
+library(randomForest)
+URLtrain="https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+URLtest="https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+download.file(URLtrain,destfile='training.csv')
+download.file(URLtest,destfile='testing.csv')
+```
+Next, I read the data in from the files. 
+```{r}
+train<-read.csv("training.csv",na.strings = c("NA",""))
+test<-read.csv("testing.csv",na.strings=c("NA",""))
+str(train)
+```
+
+A quick look at the data shows that there are many columns with NAs. Not all variables need to be used to build a model, so I will not use those columns or the first 7, which contain mostly identifying information rather than movement data. The same processing must be applied to the test data so that eventually the model can be run on that data set. For the purpose of cross validation, below I also create a testing and training set from the train data.
+```{r}
+set.seed(1987)
+keep<-colSums(is.na(train))==0
+trainsub<-train[,keep]
+trainsub<-trainsub[,-(1:7)]
+testsub<-test[,keep]
+testsub<-testsub[,-(1:7)]
+inTrain<-createDataPartition(y=trainsub$classe,p=0.7,list=FALSE)
+training<-trainsub[inTrain,]
+testing<-trainsub[-inTrain,]
+```
+
+
+## Model Building and Evaluation
+Now, I will use the caret package to create a few different models and compare their results. The following methods are represented below, with their confusion matrices: CART (rpart), random forest (using randomforest()), boosting (gbm), linear discriminant analysis (lda), and naive Bayes (nb). 
+
+```{r}
+#modrp<-train(classe~.,data=training,method="rpart")
+#predrp<-predict(modrp,newdata=testing)
+#cmrp<-confusionMatrix(predrp,testing$classe)
+modrf<-randomForest(classe~.,data=training)
+predrf<-predict(modrf,newdata=testing)
+cmrf<-confusionMatrix(predrf,testing$classe)
+cmrf
+modgbm<-train(classe~.,data=training,method="gbm",verbose=FALSE)
+predgbm<-predict(modgbm,newdata=testing)
+cmgbm<-confusionMatrix(predgbm,testing$classe)
+cmgbm
+#modlda<-train(classe~.,data=training,method="lda")
+#predlda<-predict(modlda,newdata=testing)
+#cmlda<-confusionMatrix(predlda,testing$classe)
+#modnb<-train(classe~.,data=training,method="nb")
+#prednb<-predict(modnb,newdata=testing)
+#cmnb<-confusionMatrix(prednb,testing$classe)
+```
+
+The accuracy rates are as follows: rpart - `r 0.4987`, random forest - `r cmrf$overall['Accuracy']`, gbm - `r cmgbm$overall['Accuracy']`, lda - `r 0.7067`, and nb - `r 0.7337`. Based on these accuracies in the set of data used for cross validation (called testing), the two best choices are random forest and boosting. Random forest has both a higher accuracy rate and a faster run time, so the final model select is the random forest model.
+
+The figure below shows the predicted versus actual classe value for the random forest model chosen as the final model.
+```{r}
+pred<-predict(modrf,newdata=testing)
+CM<-confusionMatrix(pred,testing$classe)
+plot(CM$table,xlab="Predicted Classe",ylab="Actual Classe",main="Predicted versus Actual Classe Value",col="blue")
+```
+
+
+## Out of Sample Error
+Since we are dealing with discrete rather than continuous data, I will use the accuracy rate on the test set as a measure of the out of sample error. The accuracy in the testing data for the selected random forest model is `r cmrf$overall['Accuracy']`, and thus the approximate out of sample error rate is `r 1-cmrf$overall['Accuracy']`.
+
+
+## Model applied to Test Data Set
+I will now apply the final model to the originally provided test data set which has already been processed. Below the predicted values for the test data are calculated.
+```{r}
+pred<-predict(modrf,newdata=testsub)
+```
+
+
+## Conclusion
+The goal of your project is to predict the manner in which individuals did the dumbbell exercise using movement data. Using the variables with no NAs in the column, I selected the random forest method because it had the highest accuracy on my cross validation set, and thus the lowest predicted out of sample error rate of the methods that I tested. Finally, using my model I made predictions for the 20 data points in the test data set.
